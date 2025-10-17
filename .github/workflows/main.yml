@@ -29,8 +29,9 @@ jobs:
 
       - name: Create DB and import dump
         run: |
-          mysql -h 127.0.0.1 -u root -e "CREATE DATABASE IF NOT EXISTS nominas_guate;"
-          mysql -h 127.0.0.1 -u root nominas_ci < nominas_guate.sql
+              mysql -h 127.0.0.1 -u root -e "CREATE DATABASE IF NOT EXISTS nominas_guate DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+              mysql -h 127.0.0.1 -u root nominas_guate < nominas_guate.sql
+
 
       - name: Build artifact (pseudo-deploy)
         run: |

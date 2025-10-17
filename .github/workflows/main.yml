@@ -28,8 +28,6 @@ jobs:
           mysql-version: '8'
 
       - name: Create DB and import dump
-        env:
-          MYSQL_PWD: root
         run: |
           mysql -h 127.0.0.1 -u root -e "CREATE DATABASE IF NOT EXISTS nominas_guate;"
           mysql -h 127.0.0.1 -u root nominas_ci < nominas_guate.sql

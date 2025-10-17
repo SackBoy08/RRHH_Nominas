@@ -1,0 +1,67 @@
+/* login.css */
+
+/* Fondo degradado sutil */
+body {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 123, 255, 0.1),
+    rgba(102, 16, 242, 0.1)
+  );
+}
+
+/* Cartón central */
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  border: none;
+  border-radius: 1rem;
+  overflow: hidden;
+  animation: fadeIn 0.6s ease-out both;
+}
+
+/* Título */
+.login-card .card-title {
+  font-weight: 600;
+  color: #343a40;
+}
+
+/* Inputs con transición suave */
+.form-control {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+/* Al enfocar */
+.form-control:focus {
+  border-color: #6610f2;
+  box-shadow: 0 0 0 0.2rem rgba(102, 16, 242, 0.25);
+}
+
+/* Botón principal con hover */
+.btn-primary {
+  background-color: #6610f2;
+  border: none;
+  transition: background-color 0.3s ease;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: #520dc2;
+}
+
+/* Animación de aparición */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Alertas centradas */
+.alert {
+  font-size: 0.95rem;
+  padding: 0.7rem 1rem;
+}

@@ -1,0 +1,59 @@
+body {
+  background: #f9f9f9;
+  font-family: Arial, sans-serif;
+  padding: 20px;
+}
+.nomina-container {
+  max-width: 900px;
+  margin: auto;
+}
+.nomina-container h2 {
+  color: #333;
+}
+.btn-create {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #007bff;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 4px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+table th, table td {
+  padding: 8px;
+  border: 1px solid #ddd;
+  text-align: center;
+}
+table th {
+  background: #f1f1f1;
+}
+form label {
+  display: block;
+  margin-top: 12px;
+  color: #555;
+}
+form select, form input[type="date"] {
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+form button {
+  margin-top: 16px;
+  padding: 10px 16px;
+  border: none;
+  background: #28a745;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+form a {
+  margin-left: 12px;
+  color: #777;
+  text-decoration: none;
+}

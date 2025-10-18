@@ -45,10 +45,20 @@ jobs:
         ports: [ "3306:3306" ]
         options: >-
           --health-cmd="mysqladmin ping -h localhost -proot"
-          --health-interval=5s --health-timeout=5s --health-retries=20
+          --health-interval=5s --health-timeout=5s --health-retries=30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+
+      - name: Verify dump file exists
+        run: |
+          ls -lah
+          test -f nominas_guate.sql || { echo "❌ No se encontró nominas_guate.sql en la raíz del repo"; exit 1; }
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -57,18 +67,113 @@ jobs:
           coverage: none
           extensions: mysqli
 
-      - name: Wait for MySQL & import dump
+      - name: Wait for MySQL & create DB
+        env:
+          MYSQL_PWD: root
         run: |
-          for i in {1..30}; do
-            if mysql -h 127.0.0.1 -P 3306 -u root -proot -e "SELECT 1" >/dev/null 2>&1; then
-              echo "MySQL listo"; break
+          # espera activa hasta 60s a que el servicio esté listo
+          for i in {1..60}; do
+            if mysqladmin --protocol=tcp -h127.0.0.1 -P3306 -uroot -proot ping >/dev/null 2>&1; then
+              echo "✅ MySQL listo"; break
             fi
-            echo "Esperando MySQL... ($i)"; sleep 2
+            echo "⏳ Esperando MySQL... ($i)"; sleep 1
           done
-          mysql -h 127.0.0.1 -P 3306 -u root -proot -e \
+          mysql --protocol=tcp -h127.0.0.1 -P3306 -uroot -proot -e \
             "CREATE DATABASE IF NOT EXISTS nominas_guate DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-          mysql -h 127.0.0.1 -P 3306 -u root -proot nominas_guate < nominas_guate.sql
 
-      # Reemplaza este smoke por tus pruebas reales (phpunit / scripts SP)
+      - name: Sanitize dump (remove DEFINER) & import
+        env:
+          MYSQL_PWD: root
+        run: |
+          # Limpia DEFINER (problema común de permisos en MySQL 8)
+          sed -i 's/DEFINER=`[^`]*`@`[^`]*`/DEFINER=CURRENT_USER/g' nominas_guate.sql
+          # Importa el dump
+          mysql --protocol=tcp -h127.0.0.1 -P3306 -uroot -proot --default-character-set=utf8mb4 nominas_guate < nominas_guate.sql
+
+      # Reemplaza este smoke por tus pruebas reales (phpunit / scripts a SP)
       - name: Smoke DB
-        run: mysql -h 127.0.0.1 -P 3306 -u root -proot -D nominas_guate -e "SHOW TABLES_
+        env:
+          MYSQL_PWD: root
+        run: |
+          mysql --protocol=tcp -h127.0.0.1 -P3306 -uroot -proot -D nominas_guate -e "SHOW TABLES;"
+
+  # ====== BUILD & ARTIFACT ======
+  build:
+    name: Build & Package
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build artifact (zip)
+        run: |
+          mkdir -p build/RRHH_Nominas
+          rsync -av --exclude '.git' --exclude '.github' ./ build/RRHH_Nominas/
+          cd build && zip -r nominas_guate.zip RRHH_Nominas
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nominas_guate
+          path: build/nominas_guate.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  # ====== RELEASE (solo en tags v*) ======
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nominas_guate
+          path: ./dist
+
+      - name: List artifact
+        run: ls -lah ./dist
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./dist/nominas_guate.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ====== (OPCIONAL) DEPLOY A PRODUCCIÓN ======
+  # Descomenta si ya tienes secrets y environment configurados.
+  # deploy_prod:
+  #   name: Deploy to Production
+  #   runs-on: ubuntu-latest
+  #   needs: release
+  #   if: startsWith(github.ref, 'refs/tags/v')
+  #   environment:
+  #     name: production                 # configura Environment 'production' en Settings
+  #     url: https://tu-dominio-o-ip     # opcional
+  #   steps:
+  #     - name: Download artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: nominas_guate
+  #         path: ./dist
+  #     - name: Setup SSH
+  #       run: |
+  #         mkdir -p ~/.ssh
+  #         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+  #         chmod 600 ~/.ssh/id_rsa
+  #         printf "Host prod\n  HostName ${{ secrets.SSH_HOST }}\n  User ${{ secrets.SSH_USER }}\n  StrictHostKeyChecking no\n" >> ~/.ssh/config
+  #     - name: Upload package
+  #       run: scp ./dist/nominas_guate.zip prod:/var/www/nominas/nominas_guate.zip
+  #     - name: Remote unpack & deploy
+  #       run: |
+  #         ssh prod '
+  #           set -e
+  #           cd /var/www/nominas
+  #           unzip -o nominas_guate.zip
+  #           # Mover RRHH_Nominas/ a docroot, limpiar cache, reiniciar servicio, etc.
+  #         '

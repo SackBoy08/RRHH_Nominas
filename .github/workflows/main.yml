@@ -1,4 +1,6 @@
 name: CI - Nominas Guate
+permissions:
+  contents: write
 
 on:
   push:

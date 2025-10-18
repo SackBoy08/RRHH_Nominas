@@ -5,9 +5,19 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+
+# Evita runs duplicados si haces push rápido
+concurrency:
+  group: ci-nominas-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  build-test:
+  lint:
+    name: Lint PHP
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,21 +27,74 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
+          coverage: none
 
       - name: Lint PHP files
         run: |
-          find . -type f -name "*.php" -print0 | xargs -0 -n1 -I{} php -l {}
+          # Linter simple sobre todos los .php
+          find . -type f -name "*.php" -print0 | xargs -0 -n1 -I{} php -l "{}"
 
-      - name: Start MySQL
-        uses: ankane/setup-mysql@v1
+  test:
+    name: Tests (MySQL)
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: nominas_guate
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
         with:
-          mysql-version: '8'
+          php-version: '8.1'
+          coverage: none
+          extensions: mysqli
 
-      - name: Create DB and import dump
+      - name: Wait for MySQL and import dump
+        env:
+          MYSQL_PWD: root
         run: |
-              mysql -h 127.0.0.1 -u root -e "CREATE DATABASE IF NOT EXISTS nominas_guate DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-              mysql -h 127.0.0.1 -u root nominas_guate < nominas_guate.sql
+          # espera a que el contenedor esté healthy
+          for i in {1..30}; do
+            if mysql -h 127.0.0.1 -P 3306 -u root -proot -e "SELECT 1" >/dev/null 2>&1; then
+              echo "MySQL listo"; break
+            fi
+            echo "Esperando MySQL... ($i)"
+            sleep 2
+          done
+          mysql -h 127.0.0.1 -P 3306 -u root -proot -e \
+            "CREATE DATABASE IF NOT EXISTS nominas_guate DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          mysql -h 127.0.0.1 -P 3306 -u root -proot nominas_guate < nominas_guate.sql
 
+      # 👉 Si ya tienes PHPUnit/Pruebas, reemplaza este bloque por tu runner
+      - name: Smoke DB (placeholder de pruebas)
+        env:
+          MYSQL_PWD: root
+        run: |
+          set -e
+          mysql -h 127.0.0.1 -P 3306 -u root -proot -D nominas_guate -e "SHOW TABLES;"
+          # Aquí podrías ejecutar phpunit, pruebas a SPs, etc.
+          # php vendor/bin/phpunit --testdox
+
+  build:
+    name: Build & Package
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Build artifact (pseudo-deploy)
         run: |
@@ -44,3 +107,5 @@ jobs:
         with:
           name: nominas_guate
           path: build/nominas_guate.zip
+          if-no-files-found: error
+          retention-days: 14
